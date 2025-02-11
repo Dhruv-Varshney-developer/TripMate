@@ -21,6 +21,7 @@ from browser_use.controller.views import (
 	SearchGoogleAction,
 	SendKeysAction,
 	SwitchTabAction,
+	WaitForElementAction,
 )
 from browser_use.utils import time_execution_async, time_execution_sync
 
@@ -81,6 +82,24 @@ class Controller:
 			msg = '🔙  Navigated back'
 			logger.info(msg)
 			return ActionResult(extracted_content=msg, include_in_memory=True)
+
+		@self.registry.action(
+			'Wait for element to be visible',
+			param_model=WaitForElementAction,  # Ensure this model is defined with "selector" and "timeout" fields
+		)
+		async def wait_for_element(params: WaitForElementAction, browser: BrowserContext):
+			"""
+			Waits for the element specified by the CSS selector to become visible within the given timeout.
+			"""
+			try:
+				await browser.wait_for_element(params.selector, params.timeout)
+				msg = f'👀  Element with selector "{params.selector}" became visible within {params.timeout}ms.'
+				logger.info(msg)
+				return ActionResult(extracted_content=msg, include_in_memory=True)
+			except Exception as e:
+				err_msg = f'❌  Failed to wait for element "{params.selector}" within {params.timeout}ms: {str(e)}'
+				logger.error(err_msg)
+				raise Exception(err_msg)
 
 		# Element Interaction Actions
 		@self.registry.action('Click element', param_model=ClickElementAction)

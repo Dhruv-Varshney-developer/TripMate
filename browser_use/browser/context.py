@@ -1137,3 +1137,17 @@ class BrowserContext:
 			screenshot=None,
 			tabs=[],
 		)
+
+	async def wait_for_element(self, selector: str, timeout: float) -> None:
+		"""
+		Waits for an element matching the given CSS selector to become visible.
+
+		Args:
+		    selector (str): The CSS selector of the element.
+		    timeout (float): The maximum time to wait for the element to be visible (in milliseconds).
+
+		Raises:
+		    TimeoutError: If the element does not become visible within the specified timeout.
+		"""
+		page = await self.get_current_page()
+		await page.wait_for_selector(selector, state="visible", timeout=timeout)
