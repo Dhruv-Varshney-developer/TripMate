@@ -14,6 +14,7 @@ from browser_use.controller.views import (
 	ClickElementAction,
 	DoneAction,
 	GoToUrlAction,
+	GroupTabsAction,
 	InputTextAction,
 	NoParamsAction,
 	OpenTabAction,
@@ -21,6 +22,7 @@ from browser_use.controller.views import (
 	SearchGoogleAction,
 	SendKeysAction,
 	SwitchTabAction,
+	UngroupTabsAction,
 )
 from browser_use.utils import time_execution_async, time_execution_sync
 
@@ -432,6 +434,35 @@ class Controller:
 				msg = f'Selection failed: {str(e)}'
 				logger.error(msg)
 				return ActionResult(error=msg, include_in_memory=True)
+
+		@self.registry.action(
+			description="Visually group browsers tab in chrome",
+			param_model=GroupTabsAction
+		)
+		async def group_tabs(self, params: GroupTabsAction, browser: BrowserContext):
+			try:
+				await browser.group_tabs(params.tab_ids, params.title, params.color)
+				return ActionResult(
+					extracted_content=f"Grouped tabs {params.tab_ids} into '{params.title}'",
+					include_in_memory=True
+				)
+			except Exception as e:
+				logger.error(f"Failed to group tabs: {str(e)}")
+				return ActionResult(error=str(e))
+
+		@self.registry.action(
+			description="Remove visual grouping from tabs in Chrome",
+			param_model=UngroupTabsAction
+		)
+		async def ungroup_tabs(self, params: UngroupTabsAction, browser: BrowserContext):
+			try:
+				await browser.ungroup_tabs(params.tab_ids)
+				return ActionResult(
+					extracted_content=f"Ungrouped tabs {params.tab_ids}",
+					include_in_memory=True
+				)
+			except Exception as e:
+				return ActionResult(error=f"Failed to ungroup tabs: {str(e)}")
 
 	def action(self, description: str, **kwargs):
 		"""Decorator for registering custom actions
