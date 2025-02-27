@@ -15,7 +15,7 @@
 [![Weave Badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fapp.workweave.ai%2Fapi%2Frepository%2Fbadge%2Forg_T5Pvn3UBswTHIsN1dWS3voPg%2F881458615&labelColor=#EC6341)](https://app.workweave.ai/reports/repository/org_T5Pvn3UBswTHIsN1dWS3voPg/881458615)
 
 
-🌐 Browser-use is the easiest way to connect your AI agents with the browser. 
+🌐 Browser-use is the easiest way to connect your AI agents with the browser.
 
 💡 See what others are building and share your projects in our [Discord](https://link.browser-use.com/discord) - we'd love to see what you create!
 
@@ -177,7 +177,7 @@ Email [Toby](mailto:tbiddle@loop11.com?subject=I%20want%20to%20join%20the%20UI/U
 If you use Browser Use in your research or project, please cite:
 
 
-    
+
 ```bibtex
 @software{browser_use2024,
   author = {Müller, Magnus and Žunič, Gregor},
@@ -187,20 +187,16 @@ If you use Browser Use in your research or project, please cite:
   url = {https://github.com/browser-use/browser-use}
 }
 ```
- 
 
 
- <div align="center"> <img src="https://github.com/user-attachments/assets/402b2129-b6ac-44d3-a217-01aea3277dce" width="400"/> 
- 
+
+ <div align="center"> <img src="https://github.com/user-attachments/assets/402b2129-b6ac-44d3-a217-01aea3277dce" width="400"/>
+
 [![Twitter Follow](https://img.shields.io/twitter/follow/Gregor?style=social)](https://x.com/gregpr07)
 [![Twitter Follow](https://img.shields.io/twitter/follow/Magnus?style=social)](https://x.com/mamagnus00)
- 
- </div> 
+
+ </div>
 
 <div align="center">
 Made with ❤️ in Zurich and San Francisco
- </div> 
-
-
-
-
+ </div>

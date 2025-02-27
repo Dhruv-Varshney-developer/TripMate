@@ -9,7 +9,7 @@ from unittest.mock import Mock
 
 def test_is_url_allowed():
     """
-    Test the _is_url_allowed method to verify that it correctly checks URLs against 
+    Test the _is_url_allowed method to verify that it correctly checks URLs against
     the allowed domains configuration.
     Scenario 1: When allowed_domains is None, all URLs should be allowed.
     Scenario 2: When allowed_domains is a list, only URLs matching the allowed domain(s) are allowed.
@@ -151,7 +151,7 @@ async def test_get_scroll_info():
     """
     Test the get_scroll_info method by mocking the page's evaluate method.
     This dummy page returns preset values for window.scrollY, window.innerHeight,
-    and document.documentElement.scrollHeight. The test then verifies that the 
+    and document.documentElement.scrollHeight. The test then verifies that the
     computed scroll information (pixels_above and pixels_below) match the expected values.
     """
     # Define a dummy page with an async evaluate method returning preset values.

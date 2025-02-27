@@ -29,7 +29,7 @@ def get_llm(provider: str):
         if not api_key:
             st.error("Error: ANTHROPIC_API_KEY is not set. Please provide a valid API key.")
             st.stop()
-        
+
         return ChatAnthropic(
             model_name='claude-3-5-sonnet-20240620', timeout=25, stop=None, temperature=0.0
         )
@@ -39,7 +39,7 @@ def get_llm(provider: str):
         if not api_key:
             st.error("Error: OPENAI_API_KEY is not set. Please provide a valid API key.")
             st.stop()
-        
+
         return ChatOpenAI(model='gpt-4o', temperature=0.0)
     else:
         st.error(f'Unsupported provider: {provider}')
