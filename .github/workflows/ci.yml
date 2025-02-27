@@ -21,8 +21,8 @@ jobs:
         with:
           python-version: 3.x
       - run: pip install --upgrade pip
-      - run: pip install pytest
-      - run: pip install --editable .
+      # - run: pip install pytest
+      - run: pip install --editable ".[dev]"
       # TODO: Add a GitHub Actions secrets.OPENAI_API_KEY and enable the ignored tests
       # openai.OpenAIError: The api_key client option must be set either by passing api_key to the client or by setting the OPENAI_API_KEY environment variable
       - run: pytest --continue-on-collection-errors
