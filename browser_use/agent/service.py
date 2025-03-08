@@ -742,6 +742,9 @@ class Agent(Generic[Context]):
 		else:
 			logger.info('❌ Unfinished')
 
+		total_tokens = self.state.history.total_input_tokens()
+		logger.info(f'📝 Total tokens used (approximate): {total_tokens}')
+
 		if self.register_done_callback:
 			await self.register_done_callback(self.state.history)
 
