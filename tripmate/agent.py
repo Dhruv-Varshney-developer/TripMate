@@ -43,14 +43,10 @@ class TripMateAgent:
             self.attraction_function
         ])
 
-        # Configure safety settings
-        self._configure_safety_settings()
-
         # Initialize the model
         self.model = GenerativeModel(
             model_name='gemini-1.5-pro-001',
-            generation_config=self.generation_config,
-            safety_settings=self.safety_settings,
+            # generation_config=self.generation_config,
             tools=[self.tools]
         )
 
@@ -185,14 +181,14 @@ class TripMateAgent:
             }
         )
 
-    def _configure_safety_settings(self):
-        """Configure generation and safety settings."""
+    # def _configure_generation_settings(self):
+    #    """Configure generation settings """
 
-        self.generation_config = {
-            "max_output_tokens": 2048,  # Increased for more detailed responses
-            "temperature": 0.7,
-            "top_p": 0.8,
-        }
+     #   self.generation_config = {
+     #       "max_output_tokens": 2048,  # Increased for more detailed responses
+     #       "temperature": 0.7,
+     #       "top_p": 0.8,
+     #   }
 
     def _mission_prompt(self, prompt: str):
         """Create a mission prompt with sassy personality for TripMate."""
