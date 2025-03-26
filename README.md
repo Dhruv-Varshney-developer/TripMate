@@ -1,93 +1,66 @@
-# TripMate - AI-powered Travel Automation Agent
+# TripMate - Sassy Travel Assistant
 
-TripMate is an AI-powered travel assistant designed to help users plan their trips. It leverages Google's Gemini 1.5 Pro AI model and travel APIs to find and recommend flights, hotels, and attractions based on user preferences.
+TripMate is a simple AI-powered travel planning assistant with attitude that helps you find flights, hotels, trains, and attractions with a sassy, humorous tone.
 
-## Features
-
-- **Trip Planning**: Find flights, hotels, and attractions based on your specifications
-- **Multi-API Integration**: Connects with travel search APIs to provide up-to-date information
-- **Customizable Search**: Specify dates, locations, price ranges, and other preferences
-- **Sassy Personality**: Interacts with users in a fun, sassy way while being helpful
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.11 or higher
-- Google Cloud Vertex AI account (for Gemini 1.5 Pro)
-- SERP API key (for travel information)
-
-### Installation
+## Setup
 
 1. Clone this repository:
+
    ```bash
-   git clone https://github.com/yourusername/TripMate.git
-   cd TripMate
+   git clone https://github.com/yourusername/tripmate.git
+   cd tripmate
    ```
 
-2. Install dependencies:
+2. Create a virtual environment:
+
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. Install the required packages:
+
    ```bash
    pip install -r requirements.txt
    ```
 
-3. Set up environment variables:
-   ```bash
-   cp .env.example .env
-   # Edit .env file with your API keys
+4. Create a `.env` file in the project root with your API keys:
+
+   ```
+   GEMINI_API_KEY=your-gemini-api-key
+   SERP_API_KEY=your-serp-api-key
    ```
 
-### Required Environment Variables
+   Get your API keys from:
 
-The following environment variables need to be set in your `.env` file:
+   - [Google AI Studio](https://makersuite.google.com/app/apikey) for Gemini API
+   - [SerpAPI](https://serpapi.com/) for SERP API
 
-- `GOOGLE_CLOUD_PROJECT_ID`: Your Google Cloud project ID
-- `GOOGLE_CLOUD_LOCATION`: Google Cloud region (default: us-central1)
-- `SERP_API_KEY`: Your SERP API key for travel data
+## Usage
 
-### Usage
-
-Run TripMate using the main script:
+Run TripMate from the command line:
 
 ```bash
 python -m tripmate.main
 ```
 
-When prompted, enter your travel requirements. For example:
-- "Find flights from New York to Tokyo for July 15-25"
-- "I need a 4-star hotel in Paris near the Eiffel Tower for September 10-15"
-- "What are the best attractions to visit in Barcelona?"
+Example queries:
 
-## Architecture
+- "I want to travel to Bali from Agra on May 15, 2024. I'll stay for 5 days in a 4-star hotel."
+- "Find me flights from Delhi to London on June 10, 2024 and some good hotels."
+- "I need to go from Mumbai to Delhi by train on April 20, 2024 and stay for 3 days."
+- "Show me the best attractions in Paris, France."
 
-TripMate uses a modular architecture with these key components:
+## Notes
 
-- **TripMateAgent**: Core class that handles user queries and coordinates responses
-- **API Integration**: Connects to travel APIs through the SERP API service
-- **Gemini 1.5 Pro**: Powers the natural language understanding and response generation
+- You need to specify dates in your query in YYYY-MM-DD format
+- The more details you provide, the better the recommendations
 
-### API Functions
+## Project Structure
 
-TripMate provides these main functions:
-- **Hotel Search**: Find hotels based on location, dates, and star rating
-- **Flight Search**: Search for flights between destinations on specific dates
-- **Attraction Search**: Discover top attractions in any location
-
-## Future Development
-
-- Add support for more travel APIs
-- Implement booking functionality
-- Create a web interface
-- Add support for car rentals and activities
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- Google Vertex AI for Gemini 1.5 Pro capabilities
-- SERP API for travel data aggregation
+```
+tripmate/
+├── __init__.py
+├── agent.py
+└── main.py
+```
