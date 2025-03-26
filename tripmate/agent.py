@@ -1,10 +1,11 @@
 """
-TripMate Agent - A travel search agent with attitude and real-time data
+TripMate Agent - A travel search agent with attitude, real-time data, and efficient caching
 """
 
 import os
 import json
 import time
+import hashlib
 from datetime import date, datetime, timedelta
 import requests
 from dotenv import load_dotenv
@@ -72,6 +73,12 @@ class TripMateAgent:
             "transportation": []
         }
 
+        # Initialize cache for API results to avoid redundant calls
+        self.cache = {
+            "hotel_search": {},
+            "flight_search": {}
+        }
+
         # Track if this is the first interaction
         self.is_first_interaction = True
 
@@ -83,9 +90,32 @@ class TripMateAgent:
         city_lower = city.lower()
         return AIRPORT_CODES.get(city_lower, city_lower)
 
-    def search_hotels(self, location, check_in_date, check_out_date, adults=1):
-        """Search for hotels using SERP API with the correct endpoint."""
+    def _generate_cache_key(self, params):
+        """Generate a unique cache key based on search parameters."""
+        # Convert params dict to a sorted, stringified version for consistent hashing
+        param_str = json.dumps(params, sort_keys=True)
+        # Create a hash of the parameters
+        return hashlib.md5(param_str.encode()).hexdigest()
+
+    def search_hotels(self, location, check_in_date, check_out_date, adults=1, force_refresh=False):
+        """Search for hotels using SERP API with the correct endpoint and caching."""
         try:
+            # Create a params dictionary for cache key generation
+            search_params = {
+                "location": location,
+                "check_in_date": check_in_date,
+                "check_out_date": check_out_date,
+                "adults": adults
+            }
+
+            # Generate cache key
+            cache_key = self._generate_cache_key(search_params)
+
+            # Check if we have cached results and are not forcing a refresh
+            if not force_refresh and cache_key in self.cache["hotel_search"]:
+                print(f"\nUsing cached hotel results for {location}")
+                return self.cache["hotel_search"][cache_key]["results"]
+
             # Format the query string properly
             query = f"{location} Hotels"
             query_encoded = requests.utils.quote(query)
@@ -118,6 +148,13 @@ class TripMateAgent:
                     })
 
                 print(f"Found {len(hotels)} hotels")
+
+                # Cache the results
+                self.cache["hotel_search"][cache_key] = {
+                    "parameters": search_params,
+                    "timestamp": time.time(),
+                    "results": hotels
+                }
             else:
                 print("No properties found in hotel data")
                 if "error" in data:
@@ -129,12 +166,30 @@ class TripMateAgent:
             print(f"Hotel search error: {str(e)}")
             return []
 
-    def search_flights(self, origin, destination, departure_date, return_date=None, adults=1):
-        """Search for flights using SERP API with the correct endpoint."""
+    def search_flights(self, origin, destination, departure_date, return_date=None, adults=1, force_refresh=False):
+        """Search for flights using SERP API with the correct endpoint and caching."""
         try:
             # Get airport codes if available
             origin_code = self.get_airport_code(origin)
             dest_code = self.get_airport_code(destination)
+
+            # Create a params dictionary for cache key generation
+            search_params = {
+                "origin": origin_code,
+                "destination": dest_code,
+                "departure_date": departure_date,
+                "return_date": return_date,
+                "adults": adults
+            }
+
+            # Generate cache key
+            cache_key = self._generate_cache_key(search_params)
+
+            # Check if we have cached results and are not forcing a refresh
+            if not force_refresh and cache_key in self.cache["flight_search"]:
+                print(
+                    f"\nUsing cached flight results for {origin} to {destination}")
+                return self.cache["flight_search"][cache_key]["results"]
 
             # Base URL for Google Flights search according to SERP API docs
             url = f"https://serpapi.com/search.json?engine=google_flights&departure_id={origin_code}&arrival_id={dest_code}&outbound_date={departure_date}"
@@ -156,26 +211,54 @@ class TripMateAgent:
             print(
                 f"Flight API response keys: {list(data.keys()) if data else 'No data'}")
 
-            # Extract flight information
+            # Extract flight information - FIXED: look for best_flights and other_flights
             flights = []
-            if "flights" in data:
-                for flight in data["flights"][:5]:  # Limit to top 5 flights
-                    flights.append({
+
+            # Check best_flights first
+            if "best_flights" in data and data["best_flights"]:
+                print("Found flights in 'best_flights'")
+                for flight in data["best_flights"][:3]:  # Get top 3 best flights
+                    flight_info = {
+                        "type": "Best Flight",
                         "airline": flight.get("airline", "Unknown"),
                         "price": flight.get("price", "Unknown"),
                         "duration": flight.get("duration", "Unknown"),
                         "departure_time": flight.get("departure_time", "Unknown"),
                         "arrival_time": flight.get("arrival_time", "Unknown"),
                         "stops": flight.get("stops", "Unknown")
-                    })
+                    }
+                    flights.append(flight_info)
 
-                print(f"Found {len(flights)} flights")
+            # Then check other_flights
+            if "other_flights" in data and data["other_flights"]:
+                print("Found flights in 'other_flights'")
+                for flight in data["other_flights"][:2]:  # Get top 2 other flights
+                    flight_info = {
+                        "type": "Alternative Flight",
+                        "airline": flight.get("airline", "Unknown"),
+                        "price": flight.get("price", "Unknown"),
+                        "duration": flight.get("duration", "Unknown"),
+                        "departure_time": flight.get("departure_time", "Unknown"),
+                        "arrival_time": flight.get("arrival_time", "Unknown"),
+                        "stops": flight.get("stops", "Unknown")
+                    }
+                    flights.append(flight_info)
+
+            print(f"Found total of {len(flights)} flights")
+
+            # Cache the results if we found any
+            if flights:
+                self.cache["flight_search"][cache_key] = {
+                    "parameters": search_params,
+                    "timestamp": time.time(),
+                    "results": flights
+                }
             else:
                 print("No flights found in data")
                 if "error" in data:
                     print(f"API Error: {data['error']}")
 
-            return flights if flights else []
+            return flights
 
         except Exception as e:
             print(f"Flight search error: {str(e)}")
@@ -219,6 +302,9 @@ class TripMateAgent:
         IMPORTANT: For dates, convert natural language to YYYY-MM-DD format.
         For example, "5th April" should be converted to "2025-04-05" 
         (assuming current year is 2025 if not specified).
+        
+        If the user is asking to change dates (like "I want to go tomorrow" or "what about next month"),
+        calculate the new date based on the current date which is {self.today}.
         
         Previous information I already know (only extract new or different information):
         {json.dumps(self.memory, indent=2)}
@@ -271,16 +357,51 @@ class TripMateAgent:
 
         return self.memory
 
+    def _should_refresh_searches(self, user_prompt):
+        """Determine if we need to refresh search results based on user prompt."""
+        # Keywords that might indicate the user wants fresh results
+        refresh_keywords = [
+            "search again", "check again", "refresh", "update", "new search",
+            "latest", "current", "fresh", "now", "today", "find me", "get me"
+        ]
+
+        # Check if any refresh keywords are in the user prompt
+        for keyword in refresh_keywords:
+            if keyword.lower() in user_prompt.lower():
+                return True
+
+        return False
+
+    def _have_dates_changed(self, old_info, new_info):
+        """Check if travel dates have changed."""
+        return (old_info.get("check_in_date") != new_info.get("check_in_date") or
+                old_info.get("check_out_date") != new_info.get("check_out_date"))
+
+    def _have_locations_changed(self, old_info, new_info):
+        """Check if travel locations have changed."""
+        return (old_info.get("origin") != new_info.get("origin") or
+                old_info.get("destination") != new_info.get("destination"))
+
     def plan_trip(self, user_prompt):
         """
         Plan a trip based on the user's prompt, maintaining conversation history.
         """
         try:
+            # Store previous state for comparison
+            previous_memory = self.memory.copy()
+
             # Extract travel information and update memory
             trip_info = self._extract_travel_info(user_prompt)
 
             # Make reasonable assumptions for missing data
             self._make_reasonable_assumptions()
+
+            # Determine if we need to refresh searches
+            force_refresh = self._should_refresh_searches(user_prompt)
+            dates_changed = self._have_dates_changed(
+                previous_memory, self.memory)
+            locations_changed = self._have_locations_changed(
+                previous_memory, self.memory)
 
             # Check if we have enough information to start searching
             can_search = (self.memory["destination"] is not None)
@@ -295,20 +416,56 @@ class TripMateAgent:
                 print("\n=== STARTING API SEARCHES ===")
 
                 # Search for hotels if we have destination and dates
+                # Only search if we have no results OR parameters have changed OR force refresh
                 if self.memory["destination"] and self.memory["check_in_date"] and self.memory["check_out_date"]:
-                    print(
-                        f"\nSearching for hotels in {self.memory['destination']} from {self.memory['check_in_date']} to {self.memory['check_out_date']}")
-                    hotels = self.search_hotels(
-                        self.memory["destination"],
-                        self.memory["check_in_date"],
-                        self.memory["check_out_date"],
-                        self.memory.get("num_adults", 1)
+                    should_search_hotels = (
+                        force_refresh or
+                        dates_changed or
+                        locations_changed or
+                        self.is_first_interaction
                     )
+
+                    if should_search_hotels:
+                        print(
+                            f"\nSearching for hotels in {self.memory['destination']} from {self.memory['check_in_date']} to {self.memory['check_out_date']}")
+                        hotels = self.search_hotels(
+                            self.memory["destination"],
+                            self.memory["check_in_date"],
+                            self.memory["check_out_date"],
+                            self.memory.get("num_adults", 1),
+                            force_refresh
+                        )
+                    else:
+                        print(
+                            f"\nReusing existing hotel results for {self.memory['destination']}")
+                        # Get cached results based on current parameters
+                        search_params = {
+                            "location": self.memory["destination"],
+                            "check_in_date": self.memory["check_in_date"],
+                            "check_out_date": self.memory["check_out_date"],
+                            "adults": self.memory.get("num_adults", 1)
+                        }
+                        cache_key = self._generate_cache_key(search_params)
+
+                        if cache_key in self.cache["hotel_search"]:
+                            hotels = self.cache["hotel_search"][cache_key]["results"]
+                        else:
+                            # If not in cache for some reason, do a fresh search
+                            hotels = self.search_hotels(
+                                self.memory["destination"],
+                                self.memory["check_in_date"],
+                                self.memory["check_out_date"],
+                                self.memory.get("num_adults", 1),
+                                True
+                            )
+
                     search_results["hotels"] = hotels
-                    # Add a small delay between API calls
+
+                    # Add a small delay between API calls if we're doing both
                     time.sleep(1)
 
                 # Search for flights if needed
+                # Only search if we have no results OR parameters have changed OR force refresh
                 if ("flight" in self.memory["transportation"] or not self.memory["transportation"]) and self.memory["check_in_date"]:
                     flight_origin = None
                     if self.memory["transit_cities"] and len(self.memory["transit_cities"]) > 0:
@@ -317,15 +474,50 @@ class TripMateAgent:
                         flight_origin = self.memory["origin"]
 
                     if flight_origin and self.memory["destination"]:
-                        print(
-                            f"\nSearching for flights from {flight_origin} to {self.memory['destination']} on {self.memory['check_in_date']}")
-                        flights = self.search_flights(
-                            flight_origin,
-                            self.memory["destination"],
-                            self.memory["check_in_date"],
-                            self.memory.get("check_out_date"),
-                            self.memory.get("num_adults", 1)
+                        should_search_flights = (
+                            force_refresh or
+                            dates_changed or
+                            locations_changed or
+                            self.is_first_interaction
                         )
+
+                        if should_search_flights:
+                            print(
+                                f"\nSearching for flights from {flight_origin} to {self.memory['destination']} on {self.memory['check_in_date']}")
+                            flights = self.search_flights(
+                                flight_origin,
+                                self.memory["destination"],
+                                self.memory["check_in_date"],
+                                self.memory.get("check_out_date"),
+                                self.memory.get("num_adults", 1),
+                                force_refresh
+                            )
+                        else:
+                            print(
+                                f"\nReusing existing flight results for {flight_origin} to {self.memory['destination']}")
+                            # Get cached results based on current parameters
+                            search_params = {
+                                "origin": self.get_airport_code(flight_origin),
+                                "destination": self.get_airport_code(self.memory["destination"]),
+                                "departure_date": self.memory["check_in_date"],
+                                "return_date": self.memory.get("check_out_date"),
+                                "adults": self.memory.get("num_adults", 1)
+                            }
+                            cache_key = self._generate_cache_key(search_params)
+
+                            if cache_key in self.cache["flight_search"]:
+                                flights = self.cache["flight_search"][cache_key]["results"]
+                            else:
+                                # If not in cache for some reason, do a fresh search
+                                flights = self.search_flights(
+                                    flight_origin,
+                                    self.memory["destination"],
+                                    self.memory["check_in_date"],
+                                    self.memory.get("check_out_date"),
+                                    self.memory.get("num_adults", 1),
+                                    True
+                                )
+
                         search_results["flights"] = flights
 
                 print("\n=== API SEARCHES COMPLETE ===")
