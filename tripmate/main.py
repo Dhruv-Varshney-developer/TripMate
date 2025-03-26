@@ -39,7 +39,7 @@ def main():
     print("I'll help you plan your next adventure (with attitude).")
     print("What trip can I help you plan today? (Type 'exit' to quit)")
 
-    # Initialize TripMate agent
+    # Initialize TripMate agent - just once to maintain conversation memory
     agent = TripMateAgent()
 
     while True:
@@ -51,6 +51,14 @@ def main():
             print(
                 "\n🙄 TripMate: Fine, bye then! Come back when you actually want to go somewhere cool.")
             break
+
+        # Check if user wants to reset the conversation
+        if user_input.lower() in ["reset", "start over", "new trip", "clear"]:
+            print(
+                "\n🔄 TripMate: Alright, wiping the slate clean! Let's start fresh. Where to next?")
+            # Reinitialize the agent to clear memory
+            agent = TripMateAgent()
+            continue
 
         # Process user request
         print("\n⏳ TripMate is planning... (this might take a moment)")
