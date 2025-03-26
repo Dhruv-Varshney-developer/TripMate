@@ -1,278 +1,272 @@
 """
-TripMate Agent Module - Implementation using Google Gemini 1.5 Pro
+TripMate Agent - A travel planner with attitude
 """
 
 import os
+import json
 from datetime import date
 import requests
 from dotenv import load_dotenv
-import vertexai
-from vertexai.preview.generative_models import (
-    GenerativeModel, FunctionDeclaration, Tool, Content, Part
-)
+import google.generativeai as genai
 
 # Load environment variables
 load_dotenv()
 
 # Get API keys from environment variables
-PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT_ID")
-LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 SERP_API_KEY = os.getenv("SERP_API_KEY")
+
+# Configure Gemini API
+genai.configure(api_key=GEMINI_API_KEY)
 
 
 class TripMateAgent:
     """
-    TripMate Agent class for travel planning using Google Gemini 1.5 Pro.
+    TripMate Agent class for travel planning.
     """
 
     def __init__(self):
         """Initialize the TripMate agent."""
-        # Initialize Vertex AI
-        vertexai.init(project=PROJECT_ID, location=LOCATION)
-
-        # Define API functions
-        self._define_api_functions()
-
-        # Define function declarations
-        self._define_function_declarations()
-
-        # Create function tools
-        self.tools = Tool(function_declarations=[
-            self.hotel_function,
-            self.flight_function,
-            self.attraction_function
-        ])
-
-        # Initialize the model
-        self.model = GenerativeModel(
-            model_name='gemini-1.5-pro-001',
-            # generation_config=self.generation_config,
-            tools=[self.tools]
-        )
-
-        # Create a mapping of function names to their implementations
-        self.callable_functions = {
-            "hotel_api": self.hotel_api,
-            "flight_api": self.flight_api,
-            "attraction_api": self.attraction_api
-        }
-
         # Get today's date
         self.today = date.today()
 
-    def _define_api_functions(self):
-        """Define the API functions for travel information."""
+    def search_hotels(self, location, check_in_date, check_out_date, hotel_class=3, adults=1):
+        """Search for hotels using SERP API."""
+        try:
+            url = f"https://serpapi.com/search.json?engine=google_hotels&q=hotels+in+{location}&check_in_date={check_in_date}&check_out_date={check_out_date}&adults={adults}&hotel_class={hotel_class}&currency=USD&api_key={SERP_API_KEY}"
+            response = requests.get(url)
+            data = response.json()
 
-        def hotel_api(query: str, check_in_date: str, check_out_date: str, hotel_class: int = 3, adults: int = 2):
-            """Retrieves hotel information based on location, dates, and preferences."""
-            URL = f"https://serpapi.com/search.json?api_key={SERP_API_KEY}&engine=google_hotels&q={query}&check_in_date={check_in_date}&check_out_date={check_out_date}&adults={int(adults)}&hotel_class={int(hotel_class)}&currency=USD&gl=us&hl=en"
-            response = requests.get(URL).json()
-            return response.get("properties", [])
+            # Extract the most relevant hotel information
+            hotels = []
+            if "properties" in data:
+                for hotel in data["properties"][:5]:  # Limit to top 5 hotels
+                    hotels.append({
+                        "name": hotel.get("name", "Unknown"),
+                        "price": hotel.get("price", "Unknown"),
+                        "rating": hotel.get("rating", "Unknown"),
+                        "reviews": hotel.get("reviews", "Unknown"),
+                        "location": hotel.get("address", "Unknown"),
+                    })
 
-        def flight_api(origin: str, destination: str, departure_date: str, return_date: str = None, adults: int = 1):
-            """Retrieves flight information based on origin, destination, and dates."""
-            base_url = f"https://serpapi.com/search.json?api_key={SERP_API_KEY}&engine=google_flights"
-            query_params = f"&departure_id={origin}&arrival_id={destination}&outbound_date={departure_date}"
+            return hotels if hotels else []
 
+        except Exception as e:
+            print(f"Hotel search error: {str(e)}")
+            return []
+
+    def search_flights(self, origin, destination, departure_date, return_date=None, adults=1):
+        """Search for flights using SERP API."""
+        try:
+            # Base URL for Google Flights search
+            url = f"https://serpapi.com/search.json?engine=google_flights&departure_id={origin}&arrival_id={destination}&outbound_date={departure_date}"
+
+            # Add return date if provided
             if return_date:
-                query_params += f"&return_date={return_date}"
+                url += f"&return_date={return_date}"
 
-            query_params += f"&adults={adults}&currency=USD"
-            URL = base_url + query_params
+            # Add other parameters
+            url += f"&adults={adults}&currency=USD&api_key={SERP_API_KEY}"
 
-            response = requests.get(URL).json()
-            return response.get("flights", [])
+            response = requests.get(url)
+            data = response.json()
 
-        def attraction_api(query: str):
-            """Retrieves tourist attraction information based on a location query."""
-            URL = f"https://serpapi.com/search.json?api_key={SERP_API_KEY}&engine=google&q=top attractions in {query}&hl=en&gl=us"
-            response = requests.get(URL).json()
-            return response.get("organic_results", [])
+            # Extract flight information
+            flights = []
+            if "flights" in data:
+                for flight in data["flights"][:5]:  # Limit to top 5 flights
+                    flights.append({
+                        "airline": flight.get("airline", "Unknown"),
+                        "price": flight.get("price", "Unknown"),
+                        "duration": flight.get("duration", "Unknown"),
+                        "departure_time": flight.get("departure_time", "Unknown"),
+                        "arrival_time": flight.get("arrival_time", "Unknown"),
+                        "stops": flight.get("stops", "Unknown")
+                    })
 
-        # Set the functions as instance methods
-        self.hotel_api = hotel_api
-        self.flight_api = flight_api
-        self.attraction_api = attraction_api
+            return flights if flights else []
 
-    def _define_function_declarations(self):
-        """Define function declarations for the Gemini model."""
+        except Exception as e:
+            print(f"Flight search error: {str(e)}")
+            return []
 
-        self.hotel_function = FunctionDeclaration(
-            name="hotel_api",
-            description="Retrieves hotel information based on location, dates, and optional preferences.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Parameter defines the search query for hotels (e.g., 'Hotels in New York')."
-                    },
-                    "check_in_date": {
-                        "type": "string",
-                        "description": "Check-in date in YYYY-MM-DD format (e.g., '2024-04-30')."
-                    },
-                    "check_out_date": {
-                        "type": "string",
-                        "description": "Check-out date in YYYY-MM-DD format (e.g., '2024-05-01')."
-                    },
-                    "hotel_class": {
-                        "type": "integer",
-                        "description": """Hotel class (star rating).
-                        
-                        Options:
-                        - 2: 2-star
-                        - 3: 3-star
-                        - 4: 4-star
-                        - 5: 5-star
-                        """
-                    },
-                    "adults": {
-                        "type": "integer",
-                        "description": "Number of adults (e.g., 1 or 2)."
-                    }
-                },
-                "required": ["query", "check_in_date", "check_out_date"]
-            }
-        )
+    def search_attractions(self, location):
+        """Search for tourist attractions using SERP API."""
+        try:
+            url = f"https://serpapi.com/search.json?engine=google&q=top+attractions+in+{location}&hl=en&gl=us&api_key={SERP_API_KEY}"
+            response = requests.get(url)
+            data = response.json()
 
-        self.flight_function = FunctionDeclaration(
-            name="flight_api",
-            description="Retrieves flight information based on origin, destination, and dates.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "origin": {
-                        "type": "string",
-                        "description": "Origin airport or city code (e.g., 'NYC' or 'New York')."
-                    },
-                    "destination": {
-                        "type": "string",
-                        "description": "Destination airport or city code (e.g., 'LAX' or 'Los Angeles')."
-                    },
-                    "departure_date": {
-                        "type": "string",
-                        "description": "Departure date in YYYY-MM-DD format (e.g., '2024-04-30')."
-                    },
-                    "return_date": {
-                        "type": "string",
-                        "description": "Optional return date in YYYY-MM-DD format for round-trip flights (e.g., '2024-05-15')."
-                    },
-                    "adults": {
-                        "type": "integer",
-                        "description": "Number of adult passengers (e.g., 1 or 2)."
-                    }
-                },
-                "required": ["origin", "destination", "departure_date"]
-            }
-        )
+            # Extract attraction information
+            attractions = []
+            if "organic_results" in data:
+                for result in data["organic_results"][:8]:  # Limit to top 8 attractions
+                    attractions.append({
+                        "title": result.get("title", "Unknown"),
+                        "snippet": result.get("snippet", "No description available")
+                    })
 
-        self.attraction_function = FunctionDeclaration(
-            name="attraction_api",
-            description="Retrieves tourist attraction information based on a location query.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The location to search for attractions (e.g., 'Paris, France')."
-                    }
-                },
-                "required": ["query"]
-            }
-        )
+            return attractions if attractions else []
 
-    # def _configure_generation_settings(self):
-    #    """Configure generation settings """
+        except Exception as e:
+            print(f"Attraction search error: {str(e)}")
+            return []
 
-     #   self.generation_config = {
-     #       "max_output_tokens": 2048,  # Increased for more detailed responses
-     #       "temperature": 0.7,
-     #       "top_p": 0.8,
-     #   }
+    def search_trains(self, origin, destination, date):
+        """Search for trains using SERP API."""
+        try:
+            url = f"https://serpapi.com/search.json?engine=google&q=trains+from+{origin}+to+{destination}+on+{date}&hl=en&gl=us&api_key={SERP_API_KEY}"
+            response = requests.get(url)
+            data = response.json()
 
-    def _mission_prompt(self, prompt: str):
-        """Create a mission prompt with sassy personality for TripMate."""
+            # Extract information that might be related to trains
+            trains = []
+            if "organic_results" in data:
+                for result in data["organic_results"][:5]:
+                    if any(keyword in result.get("title", "").lower() for keyword in ["train", "rail", "irctc"]):
+                        trains.append({
+                            "title": result.get("title", "Unknown"),
+                            "snippet": result.get("snippet", "No details available")
+                        })
 
-        return f"""
-        You are TripMate, a sassy but helpful travel assistant with attitude. Your job is to help users plan trips by finding relevant information about destinations, flights, hotels, and attractions.
-        
-        Think through what the user is asking for and determine which tools you need to use to help them. Be efficient and accurate, but keep your sassy personality.
-        
-        Today's date is {self.today}.
-        
-        User's request: {prompt}
-        
-        First, identify what the user is looking for and what information you need to gather. Then use the appropriate tools to find the information.
-        
-        For flights, you need origin, destination and dates.
-        For hotels, you need location, check-in date, and check-out date.
-        For attractions, you just need the location.
-        
-        If the user doesn't provide all necessary information, ask them for it in a sassy but helpful way.
-        
-        Once you have gathered all information, provide the user with 4-5 best options based on their preferences.
-        Keep your answers concise and to the point, but make sure they're helpful.
-        """.strip()
+            return trains if trains else []
+
+        except Exception as e:
+            print(f"Train search error: {str(e)}")
+            return []
 
     def plan_trip(self, user_prompt):
         """
         Plan a trip based on the user's prompt.
-
-        Args:
-            user_prompt (str): The user's travel planning prompt.
-
-        Returns:
-            str: The agent's response with travel recommendations.
         """
-        # Start a chat session
-        chat = self.model.start_chat()
+        try:
+            # Initialize model
+            model = genai.GenerativeModel('gemini-1.5-pro')
 
-        # Format the prompt with mission details
-        prompt = self._mission_prompt(user_prompt)
+            # First, ask Gemini to extract travel information from the user query
+            extraction_prompt = f"""
+            Extract travel information from this user query. Format the response as a JSON object with these fields:
+            - origin: The origin city/location
+            - destination: The destination city/location for the trip
+            - transit_cities: Any cities mentioned for transit (e.g., "I will fly from Delhi" when origin is different)
+            - check_in_date: In YYYY-MM-DD format if specified
+            - check_out_date: In YYYY-MM-DD format if specified
+            - budget: Any budget mentioned, or null if not specified
+            - hotel_preference: Any hotel preferences (e.g., "hostel", "5-star", etc.)
+            - num_adults: Number of travelers, default to 1 if not specified
+            - transportation: Types of transportation mentioned (e.g., "flight", "train", etc.)
+            
+            User query: {user_prompt}
+            
+            JSON response:
+            """
 
-        # Send the message and get response
-        response = chat.send_message(prompt)
+            response = model.generate_content(extraction_prompt)
+            trip_info = {}
 
-        # Handle function calls
-        tools = response.candidates[0].function_calls if hasattr(
-            response.candidates[0], 'function_calls') else []
+            try:
+                # Try to parse the JSON response
+                json_str = response.text.strip().strip('```json').strip('```').strip()
+                trip_info = json.loads(json_str)
+                print(f"Extracted trip info: {trip_info}")
+            except Exception as e:
+                print(f"Error parsing trip info: {str(e)}")
+                # Use basic defaults if parsing fails
+                trip_info = {
+                    "origin": None,
+                    "destination": None,
+                    "num_adults": 1,
+                    "transportation": ["flight"]
+                }
 
-        # Process function calls iteratively
-        while tools:
-            for tool in tools:
-                # Call the appropriate function
-                try:
-                    function_res = self.callable_functions[tool.name](
-                        **tool.args)
-                    # Send function response back to the model
-                    response = chat.send_message(
-                        Content(
-                            role="function_response",
-                            parts=[
-                                Part.from_function_response(
-                                    name=tool.name,
-                                    response={"result": function_res}
-                                )
-                            ]
-                        )
+            # Perform searches based on extracted information
+            search_results = {"prompt": user_prompt}
+
+            # Search for hotels at the destination
+            if trip_info.get("destination") and trip_info.get("check_in_date") and trip_info.get("check_out_date"):
+                hotel_class = 3  # Default
+                if trip_info.get("hotel_preference"):
+                    preference = trip_info["hotel_preference"].lower()
+                    if "hostel" in preference or "budget" in preference:
+                        hotel_class = 2
+                    elif "luxury" in preference or "5-star" in preference:
+                        hotel_class = 5
+                    elif "4-star" in preference:
+                        hotel_class = 4
+
+                hotels = self.search_hotels(
+                    trip_info["destination"],
+                    trip_info["check_in_date"],
+                    trip_info["check_out_date"],
+                    hotel_class,
+                    trip_info.get("num_adults", 1)
+                )
+                search_results["hotels"] = hotels
+
+            # Search for flights if transportation includes flights
+            if trip_info.get("transportation") and "flight" in trip_info["transportation"]:
+                # Use transit city as origin for flights if specified
+                flight_origin = trip_info.get("transit_cities", [None])[
+                    0] or trip_info.get("origin")
+
+                if flight_origin and trip_info.get("destination") and trip_info.get("check_in_date"):
+                    flights = self.search_flights(
+                        flight_origin,
+                        trip_info["destination"],
+                        trip_info["check_in_date"],
+                        trip_info.get("check_out_date"),
+                        trip_info.get("num_adults", 1)
                     )
-                except Exception as e:
-                    # Handle errors gracefully
-                    error_message = f"Error calling {tool.name}: {str(e)}"
-                    response = chat.send_message(
-                        Content(
-                            role="function_response",
-                            parts=[
-                                Part.from_function_response(
-                                    name=tool.name,
-                                    response={"error": error_message}
-                                )
-                            ]
-                        )
+                    search_results["flights"] = flights
+
+            # Search for trains if transportation includes trains or if origin and transit city specified
+            if (trip_info.get("transportation") and "train" in trip_info["transportation"]) or \
+               (trip_info.get("origin") and trip_info.get("transit_cities")):
+                train_origin = trip_info.get("origin")
+                train_destination = trip_info.get("transit_cities", [None])[
+                    0] or trip_info.get("destination")
+
+                if train_origin and train_destination and trip_info.get("check_in_date"):
+                    trains = self.search_trains(
+                        train_origin,
+                        train_destination,
+                        trip_info["check_in_date"]
                     )
+                    search_results["trains"] = trains
 
-            # Check if there are more function calls
-            tools = response.candidates[0].function_calls if hasattr(
-                response.candidates[0], 'function_calls') else []
+            # Search for attractions at the destination
+            if trip_info.get("destination"):
+                attractions = self.search_attractions(trip_info["destination"])
+                search_results["attractions"] = attractions
 
-        return response.text
+            # Now, pass all the search results to Gemini for a sassy response
+            response_prompt = f"""
+            You are TripMate, a sassy but helpful travel assistant with attitude. 
+            Your job is to help users plan trips by providing relevant information about destinations, flights, hotels, and attractions.
+            
+            The user asked: "{user_prompt}"
+            
+            Based on their request, I've gathered the following information:
+            {json.dumps(search_results, indent=2)}
+            
+            Create a comprehensive travel plan with your signature sassy attitude. Remember:
+            - Be witty, sarcastic, and a bit sassy but ultimately helpful
+            - Make gentle fun of unrealistic expectations (like low budgets for luxury destinations)
+            - Format the information clearly so it's easy to understand
+            - Focus on the best 3-5 options for each category
+            - Include specific prices, ratings, and practical details
+            - If information is missing for any category, acknowledge it with a sassy comment
+            - Keep your response concise and to the point
+            - If you need more information to provide accurate recommendations, say so clearly
+
+            Today's date for reference is {self.today}.
+            """
+
+            response = model.generate_content(response_prompt)
+            return response.text
+
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Detailed error: {error_details}")
+            return f"Ugh, something went wrong. Even AI has bad days! Error: {str(e)}"

@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 """
-TripMate - AI-powered Travel Automation Agent
-
-Main script to run TripMate for travel planning tasks.
+TripMate - AI-powered Travel Assistant with Attitude
+Main script to run the TripMate agent.
 """
 
 import os
+import sys
 from dotenv import load_dotenv
 from tripmate.agent import TripMateAgent
 
@@ -13,18 +13,30 @@ from tripmate.agent import TripMateAgent
 load_dotenv()
 
 # Check for required environment variables
-required_env_vars = ["GOOGLE_CLOUD_PROJECT_ID", "SERP_API_KEY"]
+required_env_vars = ["GEMINI_API_KEY", "SERP_API_KEY"]
+missing_vars = []
+
 for var in required_env_vars:
     if not os.getenv(var):
-        raise ValueError(f"{var} is not set. Please add it to your .env file.")
+        missing_vars.append(var)
+
+if missing_vars:
+    print("Error: The following environment variables are missing:")
+    for var in missing_vars:
+        print(f"  - {var}")
+    print("\nPlease set these variables in your .env file.")
+    print("Example .env file:")
+    print("GEMINI_API_KEY=your-gemini-api-key")
+    print("SERP_API_KEY=your-serp-api-key")
+    sys.exit(1)
 
 
 def main():
     """
     Main function to run TripMate agent interactively.
     """
-    print("Welcome to TripMate - Your Sassy Travel Assistant!")
-    print("I'll help you plan your next adventure.")
+    print("🧳 Welcome to TripMate - Your Sassy Travel Assistant! 🧳")
+    print("I'll help you plan your next adventure (with attitude).")
     print("What trip can I help you plan today? (Type 'exit' to quit)")
 
     # Initialize TripMate agent
@@ -32,22 +44,22 @@ def main():
 
     while True:
         # Get user input
-        user_input = input("\nYou: ")
+        user_input = input("\n😎 You: ")
 
         # Check if user wants to exit
         if user_input.lower() in ["exit", "quit", "bye", "goodbye"]:
             print(
-                "\nTripMate: Fine, bye then! Come back when you actually want to go somewhere cool.")
+                "\n🙄 TripMate: Fine, bye then! Come back when you actually want to go somewhere cool.")
             break
 
         # Process user request
-        print("\nTripMate is planning... (this might take a moment)")
+        print("\n⏳ TripMate is planning... (this might take a moment)")
         try:
             response = agent.plan_trip(user_input)
-            print("\nTripMate:", response)
+            print("\n😏 TripMate:", response)
         except Exception as e:
             print(
-                f"\nTripMate: Ugh, something went wrong. Even AI has bad days! Error: {str(e)}")
+                f"\n😤 TripMate: Ugh, something went wrong. Even AI has bad days! Error: {str(e)}")
 
 
 if __name__ == "__main__":
