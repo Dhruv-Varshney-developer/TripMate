@@ -1,282 +1,305 @@
 """
-TripMate Agent Module - Implementation using Google Gemini 1.5 Pro
+TripMate Agent - A travel search agent with attitude, real-time data, and efficient caching
 """
 
 import os
+import json
+import time
 from datetime import date
-import requests
 from dotenv import load_dotenv
-import vertexai
-from vertexai.preview.generative_models import (
-    GenerativeModel, FunctionDeclaration, Tool, Content, Part
-)
+import google.generativeai as genai
+
+from .hotel_service import HotelService
+from .flight_service import FlightService
+from .extractor import TravelInfoExtractor
+from .utils import make_reasonable_assumptions
+from .constants import REFRESH_KEYWORDS
 
 # Load environment variables
 load_dotenv()
 
 # Get API keys from environment variables
-PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT_ID")
-LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 SERP_API_KEY = os.getenv("SERP_API_KEY")
+
+# Configure Gemini API
+genai.configure(api_key=GEMINI_API_KEY)
 
 
 class TripMateAgent:
     """
-    TripMate Agent class for travel planning using Google Gemini 1.5 Pro.
+    TripMate Agent class for travel planning with memory between interactions.
     """
 
     def __init__(self):
-        """Initialize the TripMate agent."""
-        # Initialize Vertex AI
-        vertexai.init(project=PROJECT_ID, location=LOCATION)
-
-        # Define API functions
-        self._define_api_functions()
-
-        # Define function declarations
-        self._define_function_declarations()
-
-        # Create function tools
-        self.tools = Tool(function_declarations=[
-            self.hotel_function,
-            self.flight_function,
-            self.attraction_function
-        ])
-
-        # Configure safety settings
-        self._configure_safety_settings()
-
-        # Initialize the model
-        self.model = GenerativeModel(
-            model_name='gemini-1.5-pro-001',
-            generation_config=self.generation_config,
-            safety_settings=self.safety_settings,
-            tools=[self.tools]
-        )
-
-        # Create a mapping of function names to their implementations
-        self.callable_functions = {
-            "hotel_api": self.hotel_api,
-            "flight_api": self.flight_api,
-            "attraction_api": self.attraction_api
-        }
-
+        """Initialize the TripMate agent with conversation memory."""
         # Get today's date
         self.today = date.today()
 
-    def _define_api_functions(self):
-        """Define the API functions for travel information."""
+        # Initialize the Gemini model
+        self.model = genai.GenerativeModel('gemini-1.5-pro')
 
-        def hotel_api(query: str, check_in_date: str, check_out_date: str, hotel_class: int = 3, adults: int = 2):
-            """Retrieves hotel information based on location, dates, and preferences."""
-            URL = f"https://serpapi.com/search.json?api_key={SERP_API_KEY}&engine=google_hotels&q={query}&check_in_date={check_in_date}&check_out_date={check_out_date}&adults={int(adults)}&hotel_class={int(hotel_class)}&currency=USD&gl=us&hl=en"
-            response = requests.get(URL).json()
-            return response.get("properties", [])
+        # Create a chat session to maintain history
+        self.chat = self.model.start_chat(history=[])
 
-        def flight_api(origin: str, destination: str, departure_date: str, return_date: str = None, adults: int = 1):
-            """Retrieves flight information based on origin, destination, and dates."""
-            base_url = f"https://serpapi.com/search.json?api_key={SERP_API_KEY}&engine=google_flights"
-            query_params = f"&departure_id={origin}&arrival_id={destination}&outbound_date={departure_date}"
-
-            if return_date:
-                query_params += f"&return_date={return_date}"
-
-            query_params += f"&adults={adults}&currency=USD"
-            URL = base_url + query_params
-
-            response = requests.get(URL).json()
-            return response.get("flights", [])
-
-        def attraction_api(query: str):
-            """Retrieves tourist attraction information based on a location query."""
-            URL = f"https://serpapi.com/search.json?api_key={SERP_API_KEY}&engine=google&q=top attractions in {query}&hl=en&gl=us"
-            response = requests.get(URL).json()
-            return response.get("organic_results", [])
-
-        # Set the functions as instance methods
-        self.hotel_api = hotel_api
-        self.flight_api = flight_api
-        self.attraction_api = attraction_api
-
-    def _define_function_declarations(self):
-        """Define function declarations for the Gemini model."""
-
-        self.hotel_function = FunctionDeclaration(
-            name="hotel_api",
-            description="Retrieves hotel information based on location, dates, and optional preferences.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Parameter defines the search query for hotels (e.g., 'Hotels in New York')."
-                    },
-                    "check_in_date": {
-                        "type": "string",
-                        "description": "Check-in date in YYYY-MM-DD format (e.g., '2024-04-30')."
-                    },
-                    "check_out_date": {
-                        "type": "string",
-                        "description": "Check-out date in YYYY-MM-DD format (e.g., '2024-05-01')."
-                    },
-                    "hotel_class": {
-                        "type": "integer",
-                        "description": """Hotel class (star rating).
-                        
-                        Options:
-                        - 2: 2-star
-                        - 3: 3-star
-                        - 4: 4-star
-                        - 5: 5-star
-                        """
-                    },
-                    "adults": {
-                        "type": "integer",
-                        "description": "Number of adults (e.g., 1 or 2)."
-                    }
-                },
-                "required": ["query", "check_in_date", "check_out_date"]
-            }
-        )
-
-        self.flight_function = FunctionDeclaration(
-            name="flight_api",
-            description="Retrieves flight information based on origin, destination, and dates.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "origin": {
-                        "type": "string",
-                        "description": "Origin airport or city code (e.g., 'NYC' or 'New York')."
-                    },
-                    "destination": {
-                        "type": "string",
-                        "description": "Destination airport or city code (e.g., 'LAX' or 'Los Angeles')."
-                    },
-                    "departure_date": {
-                        "type": "string",
-                        "description": "Departure date in YYYY-MM-DD format (e.g., '2024-04-30')."
-                    },
-                    "return_date": {
-                        "type": "string",
-                        "description": "Optional return date in YYYY-MM-DD format for round-trip flights (e.g., '2024-05-15')."
-                    },
-                    "adults": {
-                        "type": "integer",
-                        "description": "Number of adult passengers (e.g., 1 or 2)."
-                    }
-                },
-                "required": ["origin", "destination", "departure_date"]
-            }
-        )
-
-        self.attraction_function = FunctionDeclaration(
-            name="attraction_api",
-            description="Retrieves tourist attraction information based on a location query.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The location to search for attractions (e.g., 'Paris, France')."
-                    }
-                },
-                "required": ["query"]
-            }
-        )
-
-    def _configure_safety_settings(self):
-        """Configure generation and safety settings."""
-
-        self.generation_config = {
-            "max_output_tokens": 2048,  # Increased for more detailed responses
-            "temperature": 0.7,
-            "top_p": 0.8,
+        # Initialize memory to store travel details across interactions
+        self.memory = {
+            "origin": None,
+            "destination": None,
+            "transit_cities": [],
+            "check_in_date": None,
+            "check_out_date": None,
+            "budget": None,
+            "hotel_preference": None,
+            "num_adults": 1,
+            "transportation": []
         }
 
-    def _mission_prompt(self, prompt: str):
-        """Create a mission prompt with sassy personality for TripMate."""
+        # Initialize cache for API results to avoid redundant calls
+        self.cache = {
+            "hotel_search": {},
+            "flight_search": {}
+        }
 
-        return f"""
-        You are TripMate, a sassy but helpful travel assistant with attitude. Your job is to help users plan trips by finding relevant information about destinations, flights, hotels, and attractions.
-        
-        Think through what the user is asking for and determine which tools you need to use to help them. Be efficient and accurate, but keep your sassy personality.
-        
-        Today's date is {self.today}.
-        
-        User's request: {prompt}
-        
-        First, identify what the user is looking for and what information you need to gather. Then use the appropriate tools to find the information.
-        
-        For flights, you need origin, destination and dates.
-        For hotels, you need location, check-in date, and check-out date.
-        For attractions, you just need the location.
-        
-        If the user doesn't provide all necessary information, ask them for it in a sassy but helpful way.
-        
-        Once you have gathered all information, provide the user with 4-5 best options based on their preferences.
-        Keep your answers concise and to the point, but make sure they're helpful.
-        """.strip()
+        # Initialize services
+        self.hotel_service = HotelService(
+            SERP_API_KEY, self.cache["hotel_search"])
+        self.flight_service = FlightService(
+            SERP_API_KEY, self.cache["flight_search"])
+        self.extractor = TravelInfoExtractor(self.model)
+
+        # Track if this is the first interaction
+        self.is_first_interaction = True
+
+    def _should_refresh_searches(self, user_prompt):
+        """Determine if we need to refresh search results based on user prompt."""
+        # Check if any refresh keywords are in the user prompt
+        for keyword in REFRESH_KEYWORDS:
+            if keyword.lower() in user_prompt.lower():
+                return True
+
+        return False
+
+    def _have_dates_changed(self, old_info, new_info):
+        """Check if travel dates have changed."""
+        return (old_info.get("check_in_date") != new_info.get("check_in_date") or
+                old_info.get("check_out_date") != new_info.get("check_out_date"))
+
+    def _have_locations_changed(self, old_info, new_info):
+        """Check if travel locations have changed."""
+        return (old_info.get("origin") != new_info.get("origin") or
+                old_info.get("destination") != new_info.get("destination"))
 
     def plan_trip(self, user_prompt):
         """
-        Plan a trip based on the user's prompt.
-
-        Args:
-            user_prompt (str): The user's travel planning prompt.
-
-        Returns:
-            str: The agent's response with travel recommendations.
+        Plan a trip based on the user's prompt, maintaining conversation history.
         """
-        # Start a chat session
-        chat = self.model.start_chat()
+        try:
+            # Store previous state for comparison
+            previous_memory = self.memory.copy()
 
-        # Format the prompt with mission details
-        prompt = self._mission_prompt(user_prompt)
+            # Extract travel information
+            new_info = self.extractor.extract_travel_info(
+                user_prompt, self.memory)
 
-        # Send the message and get response
-        response = chat.send_message(prompt)
+            # Update memory with new information
+            self.memory = self.extractor.update_memory(self.memory, new_info)
 
-        # Handle function calls
-        tools = response.candidates[0].function_calls if hasattr(
-            response.candidates[0], 'function_calls') else []
+            # Make reasonable assumptions for missing data
+            self.memory = make_reasonable_assumptions(self.memory)
 
-        # Process function calls iteratively
-        while tools:
-            for tool in tools:
-                # Call the appropriate function
-                try:
-                    function_res = self.callable_functions[tool.name](
-                        **tool.args)
-                    # Send function response back to the model
-                    response = chat.send_message(
-                        Content(
-                            role="function_response",
-                            parts=[
-                                Part.from_function_response(
-                                    name=tool.name,
-                                    response={"result": function_res}
-                                )
-                            ]
-                        )
+            # Determine if we need to refresh searches
+            force_refresh = self._should_refresh_searches(user_prompt)
+            dates_changed = self._have_dates_changed(
+                previous_memory, self.memory)
+            locations_changed = self._have_locations_changed(
+                previous_memory, self.memory)
+
+            # Check if we have enough information to start searching
+            can_search = (self.memory["destination"] is not None)
+
+            search_results = {
+                "prompt": user_prompt,
+                "trip_info": self.memory
+            }
+
+            # Only perform searches if we have the minimum required info
+            if can_search:
+                print("\n=== STARTING API SEARCHES ===")
+                self._perform_searches(
+                    search_results, force_refresh, dates_changed, locations_changed)
+                print("\n=== API SEARCHES COMPLETE ===")
+
+            # Determine if this is the first interaction
+            is_first = self.is_first_interaction
+            self.is_first_interaction = False
+
+            # Print overall search results for debugging
+            print("\nFinal search results summary:")
+            for key, value in search_results.items():
+                if key != "prompt" and key != "trip_info":
+                    print(
+                        f"- {key}: {len(value) if isinstance(value, list) else 'Not a list'}")
+
+            # Generate response using search results
+            return self._generate_response(user_prompt, search_results, is_first)
+
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Detailed error: {error_details}")
+            return f"Ugh, something went wrong. Even AI has bad days! Error: {str(e)}"
+
+    def _perform_searches(self, search_results, force_refresh, dates_changed, locations_changed):
+        """Perform hotel and flight searches based on memory."""
+        # Search for hotels if we have destination and dates
+        if self.memory["destination"] and self.memory["check_in_date"] and self.memory["check_out_date"]:
+            should_search_hotels = (
+                force_refresh or
+                dates_changed or
+                locations_changed or
+                self.is_first_interaction
+            )
+
+            if should_search_hotels:
+                print(
+                    f"\nSearching for hotels in {self.memory['destination']} from {self.memory['check_in_date']} to {self.memory['check_out_date']}")
+                hotels = self.hotel_service.search_hotels(
+                    self.memory["destination"],
+                    self.memory["check_in_date"],
+                    self.memory["check_out_date"],
+                    self.memory.get("num_adults", 1),
+                    force_refresh
+                )
+            else:
+                print(
+                    f"\nReusing existing hotel results for {self.memory['destination']}")
+                hotels = self._get_cached_hotels()
+
+            search_results["hotels"] = hotels
+
+            # Add a small delay between API calls if we're doing both
+            time.sleep(1)
+
+        # Search for flights if needed
+        self._search_flights(search_results, force_refresh,
+                             dates_changed, locations_changed)
+
+    def _search_flights(self, search_results, force_refresh, dates_changed, locations_changed):
+        """Search for flights based on memory."""
+        if ("flight" in self.memory["transportation"] or not self.memory["transportation"]) and self.memory["check_in_date"]:
+            flight_origin = None
+            if self.memory["transit_cities"] and len(self.memory["transit_cities"]) > 0:
+                flight_origin = self.memory["transit_cities"][0]
+            elif self.memory["origin"]:
+                flight_origin = self.memory["origin"]
+
+            if flight_origin and self.memory["destination"]:
+                should_search_flights = (
+                    force_refresh or
+                    dates_changed or
+                    locations_changed or
+                    self.is_first_interaction
+                )
+
+                if should_search_flights:
+                    print(
+                        f"\nSearching for flights from {flight_origin} to {self.memory['destination']} on {self.memory['check_in_date']}")
+                    flights = self.flight_service.search_flights(
+                        flight_origin,
+                        self.memory["destination"],
+                        self.memory["check_in_date"],
+                        self.memory.get("check_out_date"),
+                        self.memory.get("num_adults", 1),
+                        force_refresh
                     )
-                except Exception as e:
-                    # Handle errors gracefully
-                    error_message = f"Error calling {tool.name}: {str(e)}"
-                    response = chat.send_message(
-                        Content(
-                            role="function_response",
-                            parts=[
-                                Part.from_function_response(
-                                    name=tool.name,
-                                    response={"error": error_message}
-                                )
-                            ]
-                        )
-                    )
+                else:
+                    print(
+                        f"\nReusing existing flight results for {flight_origin} to {self.memory['destination']}")
+                    flights = self._get_cached_flights(flight_origin)
 
-            # Check if there are more function calls
-            tools = response.candidates[0].function_calls if hasattr(
-                response.candidates[0], 'function_calls') else []
+                search_results["flights"] = flights
 
+    def _get_cached_hotels(self):
+        """Get cached hotel results based on current parameters."""
+        search_params = {
+            "location": self.memory["destination"],
+            "check_in_date": self.memory["check_in_date"],
+            "check_out_date": self.memory["check_out_date"],
+            "adults": self.memory.get("num_adults", 1)
+        }
+
+        # Try to find matching cache entry
+        for cache_key, cache_data in self.hotel_service.cache.items():
+            if self._params_match(cache_data["parameters"], search_params):
+                return cache_data["results"]
+
+        # If no cache match found, do a fresh search
+        return self.hotel_service.search_hotels(
+            self.memory["destination"],
+            self.memory["check_in_date"],
+            self.memory["check_out_date"],
+            self.memory.get("num_adults", 1),
+            True
+        )
+
+    def _get_cached_flights(self, origin):
+        """Get cached flight results based on current parameters."""
+        search_params = {
+            "origin": origin,
+            "destination": self.memory["destination"],
+            "departure_date": self.memory["check_in_date"],
+            "return_date": self.memory.get("check_out_date"),
+            "adults": self.memory.get("num_adults", 1)
+        }
+
+        # Try to find matching cache entry
+        for cache_key, cache_data in self.flight_service.cache.items():
+            if self._params_match(cache_data["parameters"], search_params):
+                return cache_data["results"]
+
+        # If no cache match found, do a fresh search
+        return self.flight_service.search_flights(
+            origin,
+            self.memory["destination"],
+            self.memory["check_in_date"],
+            self.memory.get("check_out_date"),
+            self.memory.get("num_adults", 1),
+            True
+        )
+
+    def _params_match(self, params1, params2):
+        """Check if two parameter sets match for cache lookup."""
+        for key in params1:
+            if key in params2 and params1[key] != params2[key]:
+                return False
+        return True
+
+    def _generate_response(self, user_prompt, search_results, is_first):
+        """Generate a response using search results."""
+        response_prompt = f"""
+        You are TripMate, a sassy and helpful travel assistant with attitude who specializes in travel search. 
+        Your job is to provide concrete travel options based on the information available.
+        
+        The user asked: "{user_prompt}"
+        
+        Based on all our conversations, here's what I know and have found:
+        {json.dumps(search_results, indent=2)}
+        
+        Respond with specific information, following these guidelines:
+        - Focus on providing CONCRETE search results first, then sassy commentary second
+        - If you have actual flight, hotel, or train results from the API, SHOW THEM IN DETAIL with specific prices, times and information
+        - Don't just tease information - if you have it, provide it fully
+        - If you received empty results from searches, clearly state that no results were found
+        - For attractions, provide 3-5 concrete suggestions for the destination from your knowledge
+        - Make reasonable assumptions about missing information rather than asking too many questions
+        - Be concise with your sass and focus more on delivering the actual search results
+        - If this is the user's first question ({is_first}), be more welcoming and helpful
+        - Format the results in clear sections using markdown (bold headers, bullet points)
+        
+        Today's date for reference is {self.today}.
+        """
+
+        # Send to chat to maintain history
+        response = self.chat.send_message(response_prompt)
         return response.text
