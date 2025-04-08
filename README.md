@@ -56,11 +56,3 @@ Example queries:
 - You need to specify dates in your query in YYYY-MM-DD format
 - The more details you provide, the better the recommendations
 
-## Project Structure
-
-```
-tripmate/
-├── __init__.py
-├── agent.py
-└── main.py
-```
