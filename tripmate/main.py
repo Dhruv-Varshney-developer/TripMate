@@ -6,8 +6,10 @@ Main script to run the TripMate agent.
 
 import os
 import sys
+import asyncio
 from dotenv import load_dotenv
 from tripmate.agent import TripMateAgent
+from .ws_server import start_ws_server
 
 # Load environment variables
 load_dotenv()
@@ -30,18 +32,8 @@ if missing_vars:
     print("SERP_API_KEY=your-serp-api-key")
     sys.exit(1)
 
-
-def main():
-    """
-    Main function to run TripMate agent interactively.
-    """
+async def run_cli(agent):
     print("🧳 Welcome to TripMate - Your Sassy Travel Assistant! 🧳")
-    print("I'll help you plan your next adventure (with attitude).")
-    print("What trip can I help you plan today? (Type 'exit' to quit)")
-
-    # Initialize TripMate agent - just once to maintain conversation memory
-    agent = TripMateAgent()
-
     while True:
         # Get user input
         user_input = input("\n😎 You: ")
@@ -70,5 +62,18 @@ def main():
                 f"\n😤 TripMate: Ugh, something went wrong. Even AI has bad days! Error: {str(e)}")
 
 
+async def main():
+    """
+    Main function to run TripMate agent interactively.
+    """
+    print("🧳 Welcome to TripMate - Your Sassy Travel Assistant! 🧳")
+    print("I'll help you plan your next adventure (with attitude).")
+    print("What trip can I help you plan today? (Type 'exit' to quit)")
+
+    agent = TripMateAgent()
+    await start_ws_server()
+    await run_cli(agent)
+
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
+    
