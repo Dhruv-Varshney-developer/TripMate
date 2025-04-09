@@ -146,6 +146,7 @@ test_env/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+serviceAccKey.json
 
 # Pyre type checker
 .pyre/
