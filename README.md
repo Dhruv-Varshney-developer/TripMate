@@ -56,3 +56,7 @@ Example queries:
 - You need to specify dates in your query in YYYY-MM-DD format
 - The more details you provide, the better the recommendations
 
+## 🚧 Development Note
+This project was initially started by importing code from the `browser-use` repository, as we intended to build on top of their library. However, during development, we realized that the library didn’t fulfill our needs, so we removed the original code and rebuilt everything natively from scratch to better align with our goals.
+
+
