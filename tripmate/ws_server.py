@@ -1,4 +1,5 @@
 import asyncio
+import os
 import websockets
 import json
 from .agent import TripMateAgent  # Reuse logic
@@ -26,7 +27,8 @@ async def handle_client(websocket):
 
 
 async def start_ws_server():
-    server = await websockets.serve(handle_client, "0.0.0.0", 8765)
-    print("✅ TripMate WebSocket Server running on ws://0.0.0.0:8765")
+    port = int(os.environ.get("PORT", 8765))
+    server = await websockets.serve(handle_client, "0.0.0.0", port)
+    print("✅ TripMate WebSocket Server running on port {port}")
     await asyncio.Future()  # Run forever
     return server
