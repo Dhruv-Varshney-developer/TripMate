@@ -29,6 +29,6 @@ async def handle_client(websocket):
 async def start_ws_server():
     port = int(os.environ.get("PORT", 8765))
     server = await websockets.serve(handle_client, "0.0.0.0", port)
-    print("✅ TripMate WebSocket Server running on port {port}")
+    print(f"✅ TripMate WebSocket Server running on port {port}")
     await asyncio.Future()  # Run forever
     return server
