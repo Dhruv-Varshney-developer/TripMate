@@ -66,7 +66,7 @@ async def main():
     """
     Main function to run TripMate agent interactively.
     """
-
+    print("🧳 Starting TripMate WebSocket Server")
     print("Type 'exit' to quit")
 
     agent = TripMateAgent()
