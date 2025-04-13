@@ -31,6 +31,7 @@ if missing_vars:
     print("SERP_API_KEY=your-serp-api-key")
     sys.exit(1)
 
+
 async def run_cli(agent):
     print("🧳 Welcome to TripMate - Your Sassy Travel Assistant! 🧳")
     while True:
@@ -65,9 +66,8 @@ async def main():
     """
     Main function to run TripMate agent interactively.
     """
-    print("🧳 Welcome to TripMate - Your Sassy Travel Assistant! 🧳")
-    print("I'll help you plan your next adventure (with attitude).")
-    print("What trip can I help you plan today? (Type 'exit' to quit)")
+
+    print("Type 'exit' to quit")
 
     agent = TripMateAgent()
     await start_ws_server()
@@ -75,4 +75,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
