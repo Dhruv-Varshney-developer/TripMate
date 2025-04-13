@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 TripMate - AI-powered Travel Assistant with Attitude
 Main script to run the TripMate agent.
