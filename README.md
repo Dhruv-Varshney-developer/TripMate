@@ -56,6 +56,16 @@ Example queries:
 - You need to specify dates in your query in YYYY-MM-DD format
 - The more details you provide, the better the recommendations
 
+## Learn more about the project on these links:
+- [TripMate Planner](https://github.com/Dhruv-Varshney-developer/Tripmate-Planner) - Agent 1
+- [TripMate Finder](https://github.com/Dhruv-Varshney-developer/Tripmate-Finder)- Agent 2
+- [TripMate Share](https://github.com/Dhruv-Varshney-developer/Tripmate-Share)- Agent 3
+- [Technical Whitepaper](https://motley-popcorn-c4a.notion.site/Technical-docs-1d52ab2404df8018afdfe86f4e8fdd29)
+- [Tripmate Overview](https://docs.google.com/document/d/1YahKkW0qBaG_6H9lp3DIPhmn56ApjW2dxbJNvrDZqOg/edit?usp=sharing)
+- [Demo video](https://www.youtube.com/watch?v=cyKxdZ3uryQ)
+- [Presentation Link](https://www.canva.com/design/DAGkjcxFXBQ/az25u5Wo1RgXVDd7d78UYQ/edit?utm_content=DAGkjcxFXBQ&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton) 
+
+
 ## 🚧 Development Note
 This project was initially started by importing code from the `browser-use` repository, as we intended to build on top of their library. However, during development, we realized that the library didn’t fulfill our needs, so we removed the original code and rebuilt everything natively from scratch to better align with our goals.
 
